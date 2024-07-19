@@ -10,14 +10,14 @@ def create_custom_optimizer(tvars, loss, bert_init_lr, task_init_lr, num_train_s
   task_learning_rate = tf.constant(value=task_init_lr, shape=[], dtype=tf.float32)
 
   # Implements linear decay of the learning rate.
-  bert_learning_rate = tf.train.polynomial_decay(
+  bert_learning_rate = tf.compat.v1.train.polynomial_decay(
       bert_learning_rate,
       global_step,
       num_train_steps,
       end_learning_rate=0.0,
       power=1.0,
       cycle=False)
-  task_learning_rate = tf.train.polynomial_decay(
+  task_learning_rate = tf.compat.v1.train.polynomial_decay(
       task_learning_rate,
       global_step,
       num_train_steps,

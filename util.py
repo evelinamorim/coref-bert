@@ -74,7 +74,7 @@ def load_char_dict(char_vocab_path):
 def maybe_divide(x, y):
   return 0 if y == 0 else x / float(y)
 
-def projection(inputs, output_size, initializer=tf.truncated_normal_initializer(stddev=0.02)):
+def projection(inputs, output_size, initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02)):
   return ffnn(inputs, 0, -1, output_size, dropout=None, output_weights_initializer=initializer)
 
 def highway(inputs, num_layers, dropout):
@@ -89,9 +89,9 @@ def highway(inputs, num_layers, dropout):
   return inputs
 
 def shape(x, dim):
-  return x.get_shape()[dim].value or tf.shape(x)[dim]
+  return x.get_shape()[dim] or tf.shape(x)[dim]
 
-def ffnn(inputs, num_hidden_layers, hidden_size, output_size, dropout, output_weights_initializer=tf.truncated_normal_initializer(stddev=0.02), hidden_initializer=tf.truncated_normal_initializer(stddev=0.02)):
+def ffnn(inputs, num_hidden_layers, hidden_size, output_size, dropout, output_weights_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02), hidden_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02)):
   if len(inputs.get_shape()) > 3:
     raise ValueError("FFNN with rank {} not supported".format(len(inputs.get_shape())))
 
@@ -104,17 +104,29 @@ def ffnn(inputs, num_hidden_layers, hidden_size, output_size, dropout, output_we
     current_inputs = inputs
 
   for i in range(num_hidden_layers):
-    hidden_weights = tf.get_variable("hidden_weights_{}".format(i), [shape(current_inputs, 1), hidden_size], initializer=hidden_initializer)
-    hidden_bias = tf.get_variable("hidden_bias_{}".format(i), [hidden_size], initializer=tf.zeros_initializer())
-    current_outputs = tf.nn.relu(tf.nn.xw_plus_b(current_inputs, hidden_weights, hidden_bias))
+    hidden_weights = tf.Variable(hidden_initializer(shape=[tf.shape(current_inputs)[1], hidden_size]), "hidden_weights_{}".format(i))
+    hidden_bias = tf.Variable(tf.zeros([hidden_size]), name="hidden_bias_{}".format(i))
+    current_outputs = tf.nn.relu(tf.add(tf.matmul(current_inputs, hidden_weights), hidden_bias))
 
     if dropout is not None:
       current_outputs = tf.nn.dropout(current_outputs, dropout)
     current_inputs = current_outputs
 
-  output_weights = tf.get_variable("output_weights", [shape(current_inputs, 1), output_size], initializer=output_weights_initializer)
-  output_bias = tf.get_variable("output_bias", [output_size], initializer=tf.zeros_initializer())
-  outputs = tf.nn.xw_plus_b(current_inputs, output_weights, output_bias)
+  # Define the initializers
+  output_weights_initializer = tf.keras.initializers.TruncatedNormal(stddev=0.02)
+  output_bias_initializer = tf.zeros_initializer()
+
+  # Create the variables
+  output_weights = tf.Variable(
+    initial_value=output_weights_initializer([shape(current_inputs, 1), output_size]),
+    name="output_weights"
+  )
+  output_bias = tf.Variable(
+    initial_value=output_bias_initializer([output_size]),
+    name="output_bias"
+  )
+  
+  outputs = tf.matmul(current_inputs, output_weights) + output_bias
 
   if len(inputs.get_shape()) == 3:
     outputs = tf.reshape(outputs, [batch_size, seqlen, output_size])
@@ -231,7 +243,7 @@ class EmbeddingDictionary(object):
     else:
       return v
 
-class CustomLSTMCell(tf.contrib.rnn.RNNCell):
+class CustomLSTMCell(tf.keras.layers.LSTMCell):
   def __init__(self, num_units, batch_size, dropout):
     self._num_units = num_units
     self._dropout = dropout
